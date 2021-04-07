@@ -50,6 +50,5 @@ settings.json
 .vscode/*.json
 .sublime/
 .DS_Store
-media/test.*
-media/env_maps/
-media/test/
+
+media/

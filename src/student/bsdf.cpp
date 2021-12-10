@@ -4,30 +4,30 @@
 
 namespace PT {
 
-//static Vec3 reflect(Vec3 dir) {
-//
-//    // TODO (PathTracer): Task 5
-//    // Return reflection of dir about the surface normal (0,1,0).
-//    return Vec3();
-//}
-//
-//static Vec3 refract(Vec3 out_dir, float index_of_refraction, bool& was_internal) {
-//
-//    // TODO (PathTracer): Task 5
-//    // Use Snell's Law to refract out_dir through the surface.
-//    // Return the refracted direction. Set was_internal to true if
-//    // refraction does not occur due to total internal reflection,
-//    // and false otherwise.
-//
-//    // When dot(out_dir,normal=(0,1,0)) is positive, then out_dir corresponds to a
-//    // ray exiting the surface into vaccum (ior = 1). However, note that
-//    // you should actually treat this case as _entering_ the surface, because
-//    // you want to compute the 'input' direction that would cause this output,
-//    // and to do so you can simply find the direction that out_dir would refract
-//    // _to_, as refraction is symmetric.
-//
-//    return Vec3();
-//}
+static Vec3 reflect(Vec3 dir) {
+
+    // TODO (PathTracer): Task 5
+    // Return reflection of dir about the surface normal (0,1,0).
+    return Vec3();
+}
+
+static Vec3 refract(Vec3 out_dir, float index_of_refraction, bool& was_internal) {
+
+    // TODO (PathTracer): Task 5
+    // Use Snell's Law to refract out_dir through the surface.
+    // Return the refracted direction. Set was_internal to true if
+    // refraction does not occur due to total internal reflection,
+    // and false otherwise.
+
+    // When dot(out_dir,normal=(0,1,0)) is positive, then out_dir corresponds to a
+    // ray exiting the surface into vaccum (ior = 1). However, note that
+    // you should actually treat this case as _entering_ the surface, because
+    // you want to compute the 'input' direction that would cause this output,
+    // and to do so you can simply find the direction that out_dir would refract
+    // _to_, as refraction is symmetric.
+
+    return Vec3();
+}
 
 Scatter BSDF_Lambertian::scatter(Vec3 out_dir) const {
 

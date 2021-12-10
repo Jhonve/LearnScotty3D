@@ -268,7 +268,7 @@ bool Animate::select(Scene& scene, Widgets& widgets, Scene_ID selected, Scene_ID
 
         if(handle_select) {
 
-            Scene_Object& obj = scene.get_obj(selected);
+            Scene_Object& obj = scene.get<Scene_Object>(selected);
             Vec3 base = obj.pose.transform() * (handle_select->target + obj.armature.base());
             widgets.start_drag(base, cam, spos, dir);
             old_pose = {};
@@ -278,7 +278,7 @@ bool Animate::select(Scene& scene, Widgets& widgets, Scene_ID selected, Scene_ID
 
         } else if(joint_select) {
 
-            Scene_Object& obj = scene.get_obj(selected);
+            Scene_Object& obj = scene.get<Scene_Object>(selected);
             Vec3 base = obj.pose.transform() * obj.armature.posed_base_of(joint_select);
             widgets.start_drag(base, cam, spos, dir);
 
@@ -358,6 +358,8 @@ void Animate::timeline(Manager& manager, Undo& undo, Scene& scene, Scene_Maybe o
         }
     }
 
+    if(ui_render.in_progress()) playing = false;
+
     ImGui::SameLine();
     if(ImGui::Button("Render")) {
         ui_render.open();
@@ -409,6 +411,24 @@ void Animate::timeline(Manager& manager, Undo& undo, Scene& scene, Scene_Maybe o
 
     ImGui::Text("Keyframe:");
     ImGui::SameLine();
+
+    auto all_keys = [](Scene_Item& item) {
+        Anim_Pose animation = item.animation();
+        std::set<float> keys = animation.splines.keys();
+        if(item.is<Scene_Light>()) {
+            std::set<float> more_keys = item.get<Scene_Light>().lanim.splines.keys();
+            keys.insert(more_keys.begin(), more_keys.end());
+        }
+        if(item.is<Scene_Object>()) {
+            std::set<float> more_keys = item.get<Scene_Object>().armature.keys();
+            keys.insert(more_keys.begin(), more_keys.end());
+        }
+        if(item.is<Scene_Particles>()) {
+            std::set<float> more_keys = item.get<Scene_Particles>().panim.splines.keys();
+            keys.insert(more_keys.begin(), more_keys.end());
+        }
+        return keys;
+    };
 
     auto set_item = [&, this](Scene_Item& item) {
         if(item.is<Scene_Object>()) {
@@ -470,6 +490,40 @@ void Animate::timeline(Manager& manager, Undo& undo, Scene& scene, Scene_Maybe o
         camera_spline();
         scene.for_items(clear_item);
         undo.bundle_last(undo.n_actions() - n);
+    }
+
+    ImGui::SameLine();
+    if(ImGui::Button("Move Left") && current_frame > 0) {
+        if(camera_selected && anim_camera.splines.has((float)current_frame)) {
+            undo.anim_clear_camera(anim_camera, (float)current_frame);
+            current_frame--;
+            undo.anim_camera(anim_camera, (float)current_frame, ui_camera.get());
+            camera_spline();
+            undo.bundle_last(2);
+        } else if(select && all_keys(*select).count((float)current_frame)) {
+            clear_item(*select);
+            current_frame--;
+            set_item(*select);
+            undo.bundle_last(2);
+        }
+        frame_changed = true;
+    }
+
+    ImGui::SameLine();
+    if(ImGui::Button("Move Right") && current_frame < max_frame - 1) {
+        if(camera_selected && anim_camera.splines.has((float)current_frame)) {
+            undo.anim_clear_camera(anim_camera, (float)current_frame);
+            current_frame++;
+            undo.anim_camera(anim_camera, (float)current_frame, ui_camera.get());
+            camera_spline();
+            undo.bundle_last(2);
+        } else if(select && all_keys(*select).count((float)current_frame)) {
+            clear_item(*select);
+            current_frame++;
+            set_item(*select);
+            undo.bundle_last(2);
+        }
+        frame_changed = true;
     }
 
     ImGui::Separator();
@@ -560,21 +614,7 @@ void Animate::timeline(Manager& manager, Undo& undo, Scene& scene, Scene_Maybe o
 
         ImGui::PushID(item.id());
 
-        Anim_Pose animation = item.animation();
-        std::set<float> keys = animation.splines.keys();
-        if(item.is<Scene_Light>()) {
-            std::set<float> more_keys = item.get<Scene_Light>().lanim.splines.keys();
-            keys.insert(more_keys.begin(), more_keys.end());
-        }
-        if(item.is<Scene_Object>()) {
-            std::set<float> more_keys = item.get<Scene_Object>().armature.keys();
-            keys.insert(more_keys.begin(), more_keys.end());
-        }
-        if(item.is<Scene_Particles>()) {
-            std::set<float> more_keys = item.get<Scene_Particles>().panim.splines.keys();
-            keys.insert(more_keys.begin(), more_keys.end());
-        }
-
+        auto keys = all_keys(item);
         for(float f : keys) {
             int frame = (int)std::round(f);
             if(frame >= 0 && frame < max_frame) frames[frame] = true;
@@ -659,9 +699,14 @@ void Animate::set_max(int frames) {
     current_frame = std::min(current_frame, max_frame - 1);
 }
 
-void Animate::set(int n_frames, int fps) {
-    max_frame = n_frames;
-    frame_rate = fps;
+void Animate::set(int n_frames, int fps, bool replace) {
+    if(replace) {
+        max_frame = n_frames;
+        frame_rate = fps;
+    } else {
+        max_frame = std::max(n_frames, max_frame);
+        frame_rate = std::min(frame_rate, fps);
+    }
     current_frame = std::min(current_frame, max_frame - 1);
 }
 
@@ -703,17 +748,24 @@ void Animate::invalidate(Joint* j) {
     if(joint_select == j) joint_select = nullptr;
 }
 
+bool Animate::playing_or_rendering() {
+    return playing || ui_render.in_progress();
+}
+
 void Animate::update(Scene& scene) {
 
     Uint64 time = SDL_GetPerformanceCounter();
 
     if(playing) {
+
         if((time - last_frame) * frame_rate / SDL_GetPerformanceFrequency()) {
+
             if(current_frame == max_frame - 1) {
                 playing = false;
                 current_frame = 0;
             } else {
                 current_frame++;
+                step_sim(scene);
             }
             last_frame = time;
         }
